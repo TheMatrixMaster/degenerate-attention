@@ -2,7 +2,6 @@
 import argparse
 import time
 import math
-import wandb
 import os
 import torch
 import torch.nn as nn
@@ -42,6 +41,8 @@ parser.add_argument('--cuda', action='store_true', default=False,
                     help='use CUDA')
 parser.add_argument('--wandb', action='store_true', default=False,
                     help='use wandb for logging')
+parser.add_argument('--degenerate', action='store_true', default=False,
+                    help='use degenerate attention')
 parser.add_argument('--mps', action='store_true', default=False,
                         help='enables macOS GPU training')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
@@ -64,6 +65,8 @@ if torch.cuda.is_available():
 if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
     if not args.mps:
         print("WARNING: You have mps device, to enable macOS GPU run with --mps.")
+if args.degenerate:
+    print("NOTE: You are using degenerate attention.")
 
 use_mps = args.mps and torch.backends.mps.is_available()
 if args.cuda:
@@ -111,7 +114,7 @@ test_data = batchify(corpus.test, eval_batch_size)
 
 ntokens = len(corpus.dictionary)
 if args.model == 'Transformer':
-    model = TransformerModel(ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.dropout).to(device)
+    model = TransformerModel(ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.dropout, args.degenerate).to(device)
 else:
     model = RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
 
