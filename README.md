@@ -1,0 +1,3 @@
+# degenerate-attention
+
+Instead of performing softmax over the last dimension of the attention scores which corresponds to the keys dimension, we softmax over the penultimate dimension of the attention scores which corresponds to the queries dimension. This is equivalent to performing softmax over the keys dimension, which forces the sum of attention scores in each column to equal 1. In other words, this forces the queries to compete for the keys instead of the keys competing for the queries, which may yield better results according to the global workspace theory.
