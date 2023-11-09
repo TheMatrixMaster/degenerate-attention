@@ -2,6 +2,7 @@
 import argparse
 import time
 import math
+import wandb
 import os
 import torch
 import torch.nn as nn
@@ -11,6 +12,7 @@ import data
 from models import *
 
 parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM/GRU/Transformer Language Model')
+
 parser.add_argument('--data', type=str, default='./data/wikitext-2',
                     help='location of the data corpus')
 parser.add_argument('--model', type=str, default='LSTM',
@@ -47,7 +49,7 @@ parser.add_argument('--mps', action='store_true', default=False,
                         help='enables macOS GPU training')
 parser.add_argument('--log-interval', type=int, default=200, metavar='N',
                     help='report interval')
-parser.add_argument('--save', type=str, default='model.pt',
+parser.add_argument('--save', type=str, default='results/model.pt',
                     help='path to save the final model')
 parser.add_argument('--onnx-export', type=str, default='',
                     help='path to export the final model in onnx format')
@@ -65,6 +67,17 @@ if torch.cuda.is_available():
 if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
     if not args.mps:
         print("WARNING: You have mps device, to enable macOS GPU run with --mps.")
+
+if args.wandb:
+    dataset = args.data.split("/")[-1]
+    wandb.init(
+        project="degenerate-attn-nlp",
+        config=args,
+        resume="allow",
+        group=f"{args.model}-{dataset}",
+        name=f"{'degenerate' if args.degenerate else 'regular'}-attn-seed-{args.seed}"
+    )
+
 if args.degenerate:
     print("NOTE: You are using degenerate attention.")
 
@@ -206,6 +219,16 @@ def train():
                     'loss {:5.2f} | ppl {:8.2f}'.format(
                 epoch, batch, len(train_data) // args.bptt, lr,
                 elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+            
+            wandb.log({
+                "epoch": epoch,
+                "batch": batch,
+                "lr": lr,
+                "ms/batch": elapsed * 1000 / args.log_interval,
+                "loss": cur_loss,
+                "ppl": math.exp(cur_loss)
+            })
+
             total_loss = 0
             start_time = time.time()
         if args.dry_run:
@@ -235,6 +258,9 @@ try:
                 'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
                                            val_loss, math.exp(val_loss)))
         print('-' * 89)
+
+        wandb.log({"epoch": epoch, "val_loss": val_loss, "val_ppl": math.exp(val_loss)})
+
         # Save the model if the validation loss is the best we've seen so far.
         if not best_val_loss or val_loss < best_val_loss:
             with open(args.save, 'wb') as f:
@@ -263,6 +289,10 @@ print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
     test_loss, math.exp(test_loss)))
 print('=' * 89)
 
+wandb.log({"test_loss": test_loss, "test_ppl": math.exp(test_loss)})
+
 if len(args.onnx_export) > 0:
     # Export the model in ONNX format.
     export_onnx(args.onnx_export, batch_size=1, seq_len=args.bptt)
+
+wandb.join()
