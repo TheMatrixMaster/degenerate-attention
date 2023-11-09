@@ -57,6 +57,8 @@ parser.add_argument('--nhead', type=int, default=2,
                     help='the number of heads in the encoder/decoder of the transformer model')
 parser.add_argument('--dry-run', action='store_true',
                     help='verify the code and the model')
+parser.add_argument('--patience', type=int, default=5,
+                    help='patience for early stopping')
 args = parser.parse_args()
 
 # Set the random seed manually for reproducibility.
@@ -246,6 +248,8 @@ def export_onnx(path, batch_size, seq_len):
 # Loop over epochs.
 lr = args.lr
 best_val_loss = None
+best_val_ppl = None
+patience = args.patience
 
 # At any point you can hit Ctrl + C to break out of training early.
 try:
@@ -253,22 +257,30 @@ try:
         epoch_start_time = time.time()
         train()
         val_loss = evaluate(val_data)
+        val_ppl = math.exp(val_loss)
         print('-' * 89)
         print('| end of epoch {:3d} | time: {:5.2f}s | valid loss {:5.2f} | '
                 'valid ppl {:8.2f}'.format(epoch, (time.time() - epoch_start_time),
-                                           val_loss, math.exp(val_loss)))
+                                           val_loss, val_ppl))
         print('-' * 89)
 
-        wandb.log({"epoch": epoch, "val_loss": val_loss, "val_ppl": math.exp(val_loss)})
+        wandb.log({"epoch": epoch, "val_loss": val_loss, "val_ppl": val_ppl})
 
         # Save the model if the validation loss is the best we've seen so far.
         if not best_val_loss or val_loss < best_val_loss:
             with open(args.save, 'wb') as f:
                 torch.save(model, f)
             best_val_loss = val_loss
+            patience = args.patience
         else:
             # Anneal the learning rate if no improvement has been seen in the validation dataset.
             lr /= 4.0
+            patience -= 1
+
+        if patience == 0:
+            print(f"Early stopping after {epoch} epochs.")
+            break
+
 except KeyboardInterrupt:
     print('-' * 89)
     print('Exiting from training early')
