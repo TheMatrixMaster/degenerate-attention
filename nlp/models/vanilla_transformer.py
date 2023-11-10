@@ -47,7 +47,7 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 class TransformerModel(nn.Transformer):
-    """Container module with an encoder, a recurrent or transformer module, and a decoder."""
+    """Container module with an encoder, a transformer module, and a decoder."""
 
     def __init__(self, ntoken, ninp, nhead, nhid, nlayers, dropout=0.5, is_degenerate=False):
         super(TransformerModel, self).__init__(d_model=ninp, nhead=nhead, dim_feedforward=nhid, num_encoder_layers=nlayers)
@@ -84,6 +84,6 @@ class TransformerModel(nn.Transformer):
 
         src = self.input_emb(src) * math.sqrt(self.ninp)
         src = self.pos_encoder(src)
-        output = self.encoder(src, mask=self.src_mask, is_degenerate=self.is_degenerate)
+        output = self.encoder(src, mask=self.src_mask, is_degenerate=self.is_degenerate, is_causal=False)
         output = self.decoder(output)
         return F.log_softmax(output, dim=-1)

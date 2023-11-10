@@ -77,7 +77,8 @@ if args.wandb:
         config=args,
         resume="allow",
         group=f"{args.model}-{dataset}",
-        name=f"{'degenerate' if args.degenerate else 'regular'}-attn-seed-{args.seed}"
+        name=f"{'degenerate' if args.degenerate else 'regular'}-attn-seed-{args.seed}",
+        mode="offline"
     )
 
 if args.degenerate:
@@ -130,8 +131,12 @@ test_data = batchify(corpus.test, eval_batch_size)
 ntokens = len(corpus.dictionary)
 if args.model == 'Transformer':
     model = TransformerModel(ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.dropout, args.degenerate).to(device)
-else:
+elif args.model in ['LSTM', 'RNN_TANH', 'GRU', 'RNN_RELU']:
     model = RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
+elif args.model == 'GPT2':
+    model = models['gpt2']['raw'](ntokens, args.bptt).to(device)
+else:
+    raise ValueError(f"Model {args.model} not supported.")
 
 criterion = nn.NLLLoss()
 

@@ -60,7 +60,9 @@ class Threshold(Module):
 
     def extra_repr(self):
         inplace_str = ', inplace=True' if self.inplace else ''
-        return f'threshold={self.threshold}, value={self.value}{inplace_str}'
+        return 'threshold={}, value={}{}'.format(
+            self.threshold, self.value, inplace_str
+        )
 
 
 class ReLU(Module):
@@ -106,7 +108,7 @@ class ReLU(Module):
 
 
 class RReLU(Module):
-    r"""Applies the randomized leaky rectified linear unit function, element-wise,
+    r"""Applies the randomized leaky rectified liner unit function, element-wise,
     as described in the paper:
 
     `Empirical Evaluation of Rectified Activations in Convolutional Network`_.
@@ -121,8 +123,7 @@ class RReLU(Module):
         \end{cases}
 
     where :math:`a` is randomly sampled from uniform distribution
-    :math:`\mathcal{U}(\text{lower}, \text{upper})` during training while during
-    evaluation :math:`a` is fixed with :math:`a = \frac{\text{lower} + \text{upper}}{2}`.
+    :math:`\mathcal{U}(\text{lower}, \text{upper})`.
 
      See: https://arxiv.org/pdf/1505.00853.pdf
 
@@ -168,7 +169,7 @@ class RReLU(Module):
 
     def extra_repr(self):
         inplace_str = ', inplace=True' if self.inplace else ''
-        return f'lower={self.lower}, upper={self.upper}{inplace_str}'
+        return 'lower={}, upper={}{}'.format(self.lower, self.upper, inplace_str)
 
 
 class Hardtanh(Module):
@@ -235,7 +236,9 @@ class Hardtanh(Module):
 
     def extra_repr(self) -> str:
         inplace_str = ', inplace=True' if self.inplace else ''
-        return f'min_val={self.min_val}, max_val={self.max_val}{inplace_str}'
+        return 'min_val={}, max_val={}{}'.format(
+            self.min_val, self.max_val, inplace_str
+        )
 
 
 class ReLU6(Hardtanh):
@@ -515,7 +518,7 @@ class ELU(Module):
 
     def extra_repr(self) -> str:
         inplace_str = ', inplace=True' if self.inplace else ''
-        return f'alpha={self.alpha}{inplace_str}'
+        return 'alpha={}{}'.format(self.alpha, inplace_str)
 
 
 class CELU(Module):
@@ -559,7 +562,7 @@ class CELU(Module):
 
     def extra_repr(self) -> str:
         inplace_str = ', inplace=True' if self.inplace else ''
-        return f'alpha={self.alpha}{inplace_str}'
+        return 'alpha={}{}'.format(self.alpha, inplace_str)
 
 
 class SELU(Module):
@@ -641,7 +644,7 @@ class GLU(Module):
         return F.glu(input, self.dim)
 
     def extra_repr(self) -> str:
-        return f'dim={self.dim}'
+        return 'dim={}'.format(self.dim)
 
 
 class GELU(Module):
@@ -653,7 +656,7 @@ class GELU(Module):
 
     When the approximate argument is 'tanh', Gelu is estimated with:
 
-    .. math:: \text{GELU}(x) = 0.5 * x * (1 + \text{Tanh}(\sqrt{2 / \pi} * (x + 0.044715 * x^3)))
+    .. math:: \text{GELU}(x) = 0.5 * x * (1 + \text{Tanh}(\sqrt(2 / \pi) * (x + 0.044715 * x^3)))
 
     Args:
         approximate (str, optional): the gelu approximation algorithm to use:
@@ -682,7 +685,7 @@ class GELU(Module):
         return F.gelu(input, approximate=self.approximate)
 
     def extra_repr(self) -> str:
-        return f'approximate={repr(self.approximate)}'
+        return 'approximate={}'.format(repr(self.approximate))
 
 
 class Hardshrink(Module):
@@ -724,7 +727,7 @@ class Hardshrink(Module):
         return F.hardshrink(input, self.lambd)
 
     def extra_repr(self) -> str:
-        return f'{self.lambd}'
+        return '{}'.format(self.lambd)
 
 
 class LeakyReLU(Module):
@@ -775,7 +778,7 @@ class LeakyReLU(Module):
 
     def extra_repr(self) -> str:
         inplace_str = ', inplace=True' if self.inplace else ''
-        return f'negative_slope={self.negative_slope}{inplace_str}'
+        return 'negative_slope={}{}'.format(self.negative_slope, inplace_str)
 
 
 class LogSigmoid(Module):
@@ -840,7 +843,7 @@ class Softplus(Module):
         return F.softplus(input, self.beta, self.threshold)
 
     def extra_repr(self) -> str:
-        return f'beta={self.beta}, threshold={self.threshold}'
+        return 'beta={}, threshold={}'.format(self.beta, self.threshold)
 
 
 class Softshrink(Module):
@@ -883,26 +886,6 @@ class Softshrink(Module):
         return str(self.lambd)
 
 
-def _check_arg_device(x: Optional[torch.Tensor]) -> bool:
-    if x is not None:
-        return x.device.type in ["cpu", "cuda", torch.utils.backend_registration._privateuse1_backend_name]
-    return True
-
-
-def _arg_requires_grad(x: Optional[torch.Tensor]) -> bool:
-    if x is not None:
-        return x.requires_grad
-    return False
-
-
-def _is_make_fx_tracing():
-    if not torch.jit.is_scripting():
-        torch_dispatch_mode_stack = torch.utils._python_dispatch._get_current_dispatch_mode_stack()
-        return any(type(x) == torch.fx.experimental.proxy_tensor.ProxyTorchDispatchMode for x in torch_dispatch_mode_stack)
-    else:
-        return False
-
-
 class MultiheadAttention(Module):
     r"""Allows the model to jointly attend to information
     from different representation subspaces as described in the paper:
@@ -915,14 +898,14 @@ class MultiheadAttention(Module):
 
     where :math:`head_i = \text{Attention}(QW_i^Q, KW_i^K, VW_i^V)`.
 
-    ``nn.MultiHeadAttention`` will use the optimized implementations of
-    ``scaled_dot_product_attention()`` when possible.
+    ``forward()`` will use the optimized implementations of
+    ``scaled_dot_product_attention()``.
 
     In addition to support for the new ``scaled_dot_product_attention()``
     function, for speeding up Inference, MHA will use
     fastpath inference with support for Nested Tensors, iff:
 
-    - self attention is being computed (i.e., ``query``, ``key``, and ``value`` are the same tensor).
+    - self attention is being computed (i.e., ``query``, ``key``, and ``value`` are the same tensor.
     - inputs are batched (3D) with ``batch_first==True``
     - Either autograd is disabled (using ``torch.inference_mode`` or ``torch.no_grad``) or no tensor argument ``requires_grad``
     - training is disabled (using ``.eval()``)
@@ -972,11 +955,6 @@ class MultiheadAttention(Module):
 
     def __init__(self, embed_dim, num_heads, dropout=0., bias=True, add_bias_kv=False, add_zero_attn=False,
                  kdim=None, vdim=None, batch_first=False, device=None, dtype=None) -> None:
-        if embed_dim <= 0 or num_heads <= 0:
-            raise ValueError(
-                f"embed_dim and num_heads must be greater than 0,"
-                f" got embed_dim={embed_dim} and num_heads={num_heads} instead"
-            )
         factory_kwargs = {'device': device, 'dtype': dtype}
         super().__init__()
         self.embed_dim = embed_dim
@@ -1072,8 +1050,6 @@ class MultiheadAttention(Module):
             For a binary mask, a ``True`` value indicates that the corresponding ``key`` value will be ignored for
             the purpose of attention. For a float mask, it will be directly added to the corresponding ``key`` value.
         need_weights: If specified, returns ``attn_output_weights`` in addition to ``attn_outputs``.
-            Set ``need_weights=False`` to use the optimized ``scaled_dot_product_attention``
-            and achieve the best performance for MHA.
             Default: ``True``.
         attn_mask: If specified, a 2D or 3D mask preventing attention to certain positions. Must be of shape
             :math:`(L, S)` or :math:`(N\cdot\text{num\_heads}, L, S)`, where :math:`N` is the batch size,
@@ -1083,9 +1059,6 @@ class MultiheadAttention(Module):
             corresponding position is not allowed to attend. For a float mask, the mask values will be added to
             the attention weight.
             If both attn_mask and key_padding_mask are supplied, their types should match.
-        average_attn_weights: If true, indicates that the returned ``attn_weights`` should be averaged across
-            heads. Otherwise, ``attn_weights`` are provided separately per head. Note that this flag only has an
-            effect when ``need_weights=True``. Default: ``True`` (i.e. average weights across heads)
         is_causal: If specified, applies a causal mask as attention mask.
             Default: ``False``.
             Warning:
@@ -1093,6 +1066,9 @@ class MultiheadAttention(Module):
             causal mask. Providing incorrect hints can result in
             incorrect execution, including forward and backward
             compatibility.
+        average_attn_weights: If true, indicates that the returned ``attn_weights`` should be averaged across
+            heads. Otherwise, ``attn_weights`` are provided separately per head. Note that this flag only has an
+            effect when ``need_weights=True``. Default: ``True`` (i.e. average weights across heads)
 
     Outputs:
         - **attn_output** - Attention outputs of shape :math:`(L, E)` when input is unbatched,
@@ -1108,11 +1084,6 @@ class MultiheadAttention(Module):
         .. note::
             `batch_first` argument is ignored for unbatched inputs.
         """
-
-        why_not_fast_path = ''
-        if ((attn_mask is not None and torch.is_floating_point(attn_mask))
-           or (key_padding_mask is not None) and torch.is_floating_point(key_padding_mask)):
-            why_not_fast_path = "floating-point masks are not supported for fast path."
 
         is_batched = query.dim() == 3
 
@@ -1133,6 +1104,8 @@ class MultiheadAttention(Module):
             check_other=False,
         )
 
+
+        why_not_fast_path = ''
         if not is_batched:
             why_not_fast_path = f"input not batched; expected query.dim() of 3 but got {query.dim()}"
         elif query is not key or key is not value:
@@ -1142,15 +1115,11 @@ class MultiheadAttention(Module):
             why_not_fast_path = "non-self attention was used (query, key, and value are not the same Tensor)"
         elif self.in_proj_bias is not None and query.dtype != self.in_proj_bias.dtype:
             why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_bias ({self.in_proj_bias.dtype}) don't match"
-        elif self.in_proj_weight is None:
-            why_not_fast_path = "in_proj_weight was None"
-        elif query.dtype != self.in_proj_weight.dtype:
+        elif self.in_proj_weight is not None and query.dtype != self.in_proj_weight.dtype:
             # this case will fail anyway, but at least they'll get a useful error message.
             why_not_fast_path = f"dtypes of query ({query.dtype}) and self.in_proj_weight ({self.in_proj_weight.dtype}) don't match"
         elif self.training:
             why_not_fast_path = "training is enabled"
-        elif (self.num_heads % 2) != 0:
-            why_not_fast_path = "self.num_heads is not even"
         elif not self.batch_first:
             why_not_fast_path = "batch_first was not True"
         elif self.bias_k is not None:
@@ -1177,10 +1146,10 @@ class MultiheadAttention(Module):
                 if query is key:
                     query = key = value = query.transpose(1, 0)
                 else:
-                    query, key = (x.transpose(1, 0) for x in (query, key))
+                    query, key = [x.transpose(1, 0) for x in (query, key)]
                     value = key
             else:
-                query, key, value = (x.transpose(1, 0) for x in (query, key, value))
+                query, key, value = [x.transpose(1, 0) for x in (query, key, value)]
 
         if not self._qkv_same_embed_dim:
             attn_output, attn_output_weights = F.multi_head_attention_forward(
@@ -1232,6 +1201,15 @@ class MultiheadAttention(Module):
         """
         mask_type: Optional[int] = None
         merged_mask: Optional[Tensor] = None
+
+        attn_mask = F._canonical_mask(
+            mask=attn_mask,
+            mask_name="attn_mask",
+            other_type=None,
+            other_name="",
+            target_type=query.dtype,
+            check_other=False,
+        )
 
         if key_padding_mask is not None:
             mask_type = 1
@@ -1314,18 +1292,13 @@ class PReLU(Module):
         factory_kwargs = {'device': device, 'dtype': dtype}
         self.num_parameters = num_parameters
         super().__init__()
-        self.init = init
-        self.weight = Parameter(torch.empty(num_parameters, **factory_kwargs))
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        torch.nn.init.constant_(self.weight, self.init)
+        self.weight = Parameter(torch.empty(num_parameters, **factory_kwargs).fill_(init))
 
     def forward(self, input: Tensor) -> Tensor:
         return F.prelu(input, self.weight)
 
     def extra_repr(self) -> str:
-        return f'num_parameters={self.num_parameters}'
+        return 'num_parameters={}'.format(self.num_parameters)
 
 
 class Softsign(Module):
@@ -1419,7 +1392,7 @@ class Softmin(Module):
         return F.softmin(input, self.dim, _stacklevel=5)
 
     def extra_repr(self):
-        return f'dim={self.dim}'
+        return 'dim={dim}'.format(dim=self.dim)
 
 class Softmax(Module):
     r"""Applies the Softmax function to an n-dimensional input Tensor
@@ -1475,7 +1448,7 @@ class Softmax(Module):
         return F.softmax(input, self.dim, _stacklevel=5)
 
     def extra_repr(self) -> str:
-        return f'dim={self.dim}'
+        return 'dim={dim}'.format(dim=self.dim)
 
 
 class Softmax2d(Module):
@@ -1501,10 +1474,7 @@ class Softmax2d(Module):
     """
 
     def forward(self, input: Tensor) -> Tensor:
-        if input.dim() not in (3, 4):
-            raise ValueError(
-                f"Softmax2d: expected input to be 3D or 4D, got {input.dim()}D instead"
-            )
+        assert input.dim() == 4 or input.dim() == 3, 'Softmax2d requires a 3D or 4D tensor as input'
         return F.softmax(input, -3, _stacklevel=5)
 
 
@@ -1549,4 +1519,4 @@ class LogSoftmax(Module):
         return F.log_softmax(input, self.dim, _stacklevel=5)
 
     def extra_repr(self):
-        return f'dim={self.dim}'
+        return 'dim={dim}'.format(dim=self.dim)
