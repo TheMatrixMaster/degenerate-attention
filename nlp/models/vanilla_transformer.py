@@ -73,6 +73,9 @@ class TransformerModel(nn.Transformer):
         nn.init.zeros_(self.decoder.bias)
         nn.init.uniform_(self.decoder.weight, -initrange, initrange)
 
+        model_size = sum(t.numel() for t in self.parameters())
+        print(f"Vanilla transformer size: {model_size/1000**2:.1f}M parameters")
+
     def forward(self, src, has_mask=True):
         if has_mask:
             device = src.device

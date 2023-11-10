@@ -6,10 +6,13 @@ import wandb
 import os
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.onnx
 
 import data
 from models import *
+
+rnn_models = ['LSTM', 'RNN_TANH', 'GRU', 'RNN_RELU']
 
 parser = argparse.ArgumentParser(description='PyTorch Wikitext-2 RNN/LSTM/GRU/Transformer Language Model')
 
@@ -131,10 +134,11 @@ test_data = batchify(corpus.test, eval_batch_size)
 ntokens = len(corpus.dictionary)
 if args.model == 'Transformer':
     model = TransformerModel(ntokens, args.emsize, args.nhead, args.nhid, args.nlayers, args.dropout, args.degenerate).to(device)
-elif args.model in ['LSTM', 'RNN_TANH', 'GRU', 'RNN_RELU']:
+elif args.model in rnn_models:
     model = RNNModel(args.model, ntokens, args.emsize, args.nhid, args.nlayers, args.dropout, args.tied).to(device)
 elif args.model == 'GPT2':
-    model = models['gpt2']['raw'](ntokens, args.bptt).to(device)
+    cwd = os.getcwd()
+    model = models['gpt2']['raw'](vocab=corpus.dictionary, args=args).to(device)
 else:
     raise ValueError(f"Model {args.model} not supported.")
 
@@ -175,18 +179,23 @@ def evaluate(data_source):
     model.eval()
     total_loss = 0.
     ntokens = len(corpus.dictionary)
-    if args.model != 'Transformer':
+    if args.model in rnn_models:
         hidden = model.init_hidden(eval_batch_size)
     with torch.no_grad():
         for i in range(0, data_source.size(0) - 1, args.bptt):
             data, targets = get_batch(data_source, i)
-            if args.model == 'Transformer':
+            if args.model == 'GPT2':
+                output = model(data)
+                output = F.log_softmax(output.logits.view(-1, ntokens), dim=-1)
+            elif args.model == 'Transformer':
                 output = model(data)
                 output = output.view(-1, ntokens)
             else:
                 output, hidden = model(data, hidden)
                 hidden = repackage_hidden(hidden)
+
             total_loss += len(data) * criterion(output, targets).item()
+            
     return total_loss / (len(data_source) - 1)
 
 
@@ -196,19 +205,23 @@ def train():
     total_loss = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
-    if args.model != 'Transformer':
+    if args.model in rnn_models:
         hidden = model.init_hidden(args.batch_size)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
         data, targets = get_batch(train_data, i)
         # Starting each batch, we detach the hidden state from how it was previously produced.
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
         model.zero_grad()
-        if args.model == 'Transformer':
+        if args.model == 'GPT2':
+            output = model(data)
+            output = F.log_softmax(output.logits.view(-1, ntokens), dim=-1)
+        elif args.model == 'Transformer':
             output = model(data)
             output = output.view(-1, ntokens)
         else:
             hidden = repackage_hidden(hidden)
             output, hidden = model(data, hidden)
+
         loss = criterion(output, targets)
         loss.backward()
 
@@ -227,14 +240,15 @@ def train():
                 epoch, batch, len(train_data) // args.bptt, lr,
                 elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
             
-            wandb.log({
-                "epoch": epoch,
-                "batch": batch,
-                "lr": lr,
-                "ms/batch": elapsed * 1000 / args.log_interval,
-                "loss": cur_loss,
-                "ppl": math.exp(cur_loss)
-            })
+            if args.wandb:
+                wandb.log({
+                    "epoch": epoch,
+                    "batch": batch,
+                    "lr": lr,
+                    "ms/batch": elapsed * 1000 / args.log_interval,
+                    "loss": cur_loss,
+                    "ppl": math.exp(cur_loss)
+                })
 
             total_loss = 0
             start_time = time.time()
@@ -269,7 +283,8 @@ try:
                                            val_loss, val_ppl))
         print('-' * 89)
 
-        wandb.log({"epoch": epoch, "val_loss": val_loss, "val_ppl": val_ppl})
+        if args.wandb:
+            wandb.log({"epoch": epoch, "val_loss": val_loss, "val_ppl": val_ppl})
 
         # Save the model if the validation loss is the best we've seen so far.
         if not best_val_loss or val_loss < best_val_loss:
@@ -296,7 +311,7 @@ with open(args.save, 'rb') as f:
     # after load the rnn params are not a continuous chunk of memory
     # this makes them a continuous chunk, and will speed up forward pass
     # Currently, only rnn model supports flatten_parameters function.
-    if args.model in ['RNN_TANH', 'RNN_RELU', 'LSTM', 'GRU']:
+    if args.model in rnn_models:
         model.rnn.flatten_parameters()
 
 # Run on test data.
@@ -306,10 +321,12 @@ print('| End of training | test loss {:5.2f} | test ppl {:8.2f}'.format(
     test_loss, math.exp(test_loss)))
 print('=' * 89)
 
-wandb.log({"test_loss": test_loss, "test_ppl": math.exp(test_loss)})
+if args.wandb:
+    wandb.log({"test_loss": test_loss, "test_ppl": math.exp(test_loss)})
 
 if len(args.onnx_export) > 0:
     # Export the model in ONNX format.
     export_onnx(args.onnx_export, batch_size=1, seq_len=args.bptt)
 
-wandb.join()
+if args.wandb:
+    wandb.join()
