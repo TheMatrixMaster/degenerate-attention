@@ -199,12 +199,25 @@ def evaluate(data_source):
     return total_loss / (len(data_source) - 1)
 
 
+def compute_attn_weights_entropy(raw_attn_weights, layer_cutoff=3):
+    # Compute entropy of columns of attention weights
+    # @param attn_weights: (batch_size, num_heads, seq_len, seq_len)
+    # return attn_weights_entropy: (batch_size, num_heads, seq_len)
+    attn_weights = torch.cat(raw_attn_weights[:layer_cutoff], dim=0)
+    idx = attn_weights!=0
+    attn_weights[idx] = attn_weights[idx].log()*attn_weights[idx]
+    attn_weights_entropy = torch.sum(attn_weights, dim=-2)
+    attn_weights_entropy = -attn_weights_entropy.mean()
+    return attn_weights_entropy
+
 def train():
     # Turn on training mode which enables dropout.
     model.train()
     total_loss = 0.
+    total_recon_loss = 0.
     start_time = time.time()
     ntokens = len(corpus.dictionary)
+
     if args.model in rnn_models:
         hidden = model.init_hidden(args.batch_size)
     for batch, i in enumerate(range(0, train_data.size(0) - 1, args.bptt)):
@@ -213,7 +226,8 @@ def train():
         # If we didn't, the model would try backpropagating all the way to start of the dataset.
         model.zero_grad()
         if args.model == 'GPT2':
-            output = model(data)
+            output = model(data, output_attentions=True)
+            attn_entropy = compute_attn_weights_entropy(output[-1])
             output = F.log_softmax(output.logits.view(-1, ntokens), dim=-1)
         elif args.model == 'Transformer':
             output = model(data)
@@ -223,6 +237,11 @@ def train():
             output, hidden = model(data, hidden)
 
         loss = criterion(output, targets)
+        recon_loss = loss.item()
+
+        if args.model == 'GPT2':
+            loss += 0.001 * attn_entropy
+
         loss.backward()
 
         # `clip_grad_norm` helps prevent the exploding gradient problem in RNNs / LSTMs.
@@ -231,14 +250,18 @@ def train():
             p.data.add_(p.grad, alpha=-lr)
 
         total_loss += loss.item()
+        total_recon_loss += recon_loss
 
         if batch % args.log_interval == 0 and batch > 0:
             cur_loss = total_loss / args.log_interval
+            cur_recon_loss = total_recon_loss / args.log_interval
+
             elapsed = time.time() - start_time
             print('| epoch {:3d} | {:5d}/{:5d} batches | lr {:02.2f} | ms/batch {:5.2f} | '
-                    'loss {:5.2f} | ppl {:8.2f}'.format(
+                    'recon loss {:5.2f} | recon ppl {:8.2f} | total loss {:5.2f} | entropy {:5.2f}'.format(
                 epoch, batch, len(train_data) // args.bptt, lr,
-                elapsed * 1000 / args.log_interval, cur_loss, math.exp(cur_loss)))
+                elapsed * 1000 / args.log_interval, cur_recon_loss, 
+                math.exp(cur_recon_loss), cur_loss, attn_entropy))
             
             if args.wandb:
                 wandb.log({
@@ -251,6 +274,7 @@ def train():
                 })
 
             total_loss = 0
+            total_recon_loss = 0
             start_time = time.time()
         if args.dry_run:
             break
@@ -269,6 +293,7 @@ lr = args.lr
 best_val_loss = None
 best_val_ppl = None
 patience = args.patience
+lr_patience = 3
 
 # At any point you can hit Ctrl + C to break out of training early.
 try:
@@ -292,14 +317,19 @@ try:
                 torch.save(model, f)
             best_val_loss = val_loss
             patience = args.patience
+            lr_patience = 3
         else:
-            # Anneal the learning rate if no improvement has been seen in the validation dataset.
-            lr /= 4.0
+            lr_patience -= 1
             patience -= 1
 
-        if patience == 0:
+        if patience == 0 or lr < 1e-4:
             print(f"Early stopping after {epoch} epochs.")
             break
+
+        if lr_patience == 0:
+            # Anneal the learning rate if no improvement has been seen in the validation dataset.
+            lr /= 2.0
+            lr_patience = 3
 
 except KeyboardInterrupt:
     print('-' * 89)

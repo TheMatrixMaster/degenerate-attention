@@ -1,13 +1,17 @@
 module purge
-module load scipy-stack python/3.10
+module load gcc arrow cuda scipy-stack python/3.10
 
 virtualenv --no-download ~/pyenv/degeneracy
 source ~/pyenv/degeneracy/bin/activate
 
 pip install --no-index --upgrade pip
 
-# Install torch from dist
+# Install packages including jupyter-lab
 pip install --no-index -r requirements.txt
+
+# Add wrapper script to launch jupyter lab
+echo -e '#!/bin/bash\nunset XDG_RUNTIME_DIR\njupyter lab --ip $(hostname -f) --no-browser' > $VIRTUAL_ENV/bin/jupyterlab.sh
+chmod u+x $VIRTUAL_ENV/bin/jupyterlab.sh
 
 # Copy src files to support degenerate attention
 torch_path=$(python -c "import torch; print(torch.__path__[0])")

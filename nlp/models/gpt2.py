@@ -12,9 +12,10 @@ def get_raw_model(vocab, args):
         activation_function='gelu_new',
         resid_pdrop=args.dropout,
         embd_pdrop=args.dropout,
-        attn_pdrop=args.dropout,
+        attn_pdrop=0,
+        # attn_pdrop=args.dropout,
         scale_attn_weights=True,
-        degenerate_attn=args.degenerate,
+        degenerate_attn=False,
         bos_token_id=vocab.word2idx['<bos>'] if '<bos>' in vocab.word2idx else None,
         eos_token_id=vocab.word2idx['<eos>'] if '<eos>' in vocab.word2idx else None,
     )

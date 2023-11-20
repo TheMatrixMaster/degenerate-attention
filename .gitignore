@@ -1,7 +1,7 @@
 .DS_Store
+.ipynb_checkpoints/
 examples/
 __pycache__/
 nlp/results
 nlp/wandb
 data/
-sanity-check/
